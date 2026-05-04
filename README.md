@@ -139,6 +139,7 @@ media/screenshots/app-log.jpg
 docs/project-summary.md
 docs/control-and-debug-notes.md
 docs/bluetooth-app-notes.md
+docs/learning-reflection.md
 ```
 
 ## 简历表达
