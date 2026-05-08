@@ -1,3 +1,4 @@
+/* MPU6050 驱动层：只负责 I2C 寄存器读写和原始传感器数据读取。 */
 #include "mpu6050.h" 
 
 //初始化MPU6050
@@ -5,6 +6,7 @@
 //    其他,错误代码
 uint8_t MPU_Init(void)
 { 
+  /* res 保存 I2C/器件 ID 检查结果，用来判断初始化是否成功。 */
   uint8_t res;
 	
   extern I2C_HandleTypeDef hi2c1;

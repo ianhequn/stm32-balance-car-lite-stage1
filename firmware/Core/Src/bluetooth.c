@@ -2,21 +2,26 @@
 #include "control.h"
 #include "manage.h"
 #include "usart.h"
-
+//该模块负责收命令
+/* USART3 中断接收缓冲区，每次只接收 1 个蓝牙字符。 */
 uint8_t g_u8BluetoothRxByte;
+/* 最近一次收到的蓝牙命令，用于 OLED/地面站调试显示。 */
 volatile uint8_t g_u8BluetoothLastByte = 0;
+/* 蓝牙接收计数，按键没有反应时可以用它判断 STM32 是否真的收到数据。 */
 volatile uint32_t g_u32BluetoothRxCount = 0;
 
+/* 启动 USART3 单字节中断接收，后续每收到 1 字节都会进回调。 */
 void Bluetooth_Init(void)
 {
     HAL_UART_Receive_IT(&huart3, &g_u8BluetoothRxByte, 1);
 }
-
+//逻辑就是按照接受的字符是什么来判断
 void Bluetooth_OnByteReceived(uint8_t data)
 {
     g_u8BluetoothLastByte = data;
     g_u32BluetoothRxCount++;
 
+    /* 单字符协议：手机 App 每发一个字符，小车切模式或更新 Steer 目标。 */
     switch (data)
     {
     case 'M':
@@ -28,30 +33,34 @@ void Bluetooth_OnByteReceived(uint8_t data)
 
     case 'F':
     case 'f':
-        MotorClearAbnormalSpin();
+        MotorResumeFromProtection();
         g_CarRunningMode = CONTROL_MODE;
-        Steer(0.0f, 3.0f);
+        /* 第一阶段展示先压低前进命令，减少速度起来后继续冲。 */
+        Steer(0.0f, 2.6f);
         break;
 
     case 'B':
     case 'b':
-        MotorClearAbnormalSpin();
+        MotorResumeFromProtection();
         g_CarRunningMode = CONTROL_MODE;
-        Steer(0.0f, -3.8f);
+        /* 后退命令也保守一点，让 S/反向响应更容易控制。 */
+        Steer(0.0f, -3.2f);
         break;
 
     case 'L':
     case 'l':
-        MotorClearAbnormalSpin();
+        MotorResumeFromProtection();
         g_CarRunningMode = CONTROL_MODE;
-        Steer(-3.2f, 0.0f);
+        /* 降低原地转向幅度，避免小车静止附近左右抽动太明显。 */
+        Steer(-2.8f, 0.0f);
         break;
 
     case 'R':
     case 'r':
-        MotorClearAbnormalSpin();
+        MotorResumeFromProtection();
         g_CarRunningMode = CONTROL_MODE;
-        Steer(3.2f, 0.0f);
+        /* 与左转保持对称，方便调试时判断方向和手感。 */
+        Steer(2.8f, 0.0f);
         break;
 
     case 'S':
@@ -71,6 +80,13 @@ void Bluetooth_OnByteReceived(uint8_t data)
     case 'a':
         MotorClearAbnormalSpin();
         g_CarRunningMode = ULTRA_AVOID_MODE;
+        Steer(0.0f, 0.0f);
+        break;
+
+    case 'T':
+    case 't':
+        MotorClearAbnormalSpin();
+        g_CarRunningMode = INFRARED_TRACE_MODE;
         Steer(0.0f, 0.0f);
         break;
 

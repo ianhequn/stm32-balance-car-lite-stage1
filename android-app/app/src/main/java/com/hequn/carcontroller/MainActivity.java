@@ -73,9 +73,14 @@ public class MainActivity extends Activity {
 
         LinearLayout mode = row();
         mode.addView(cmdButton("手动", "M", Color.rgb(30, 41, 59)), weight());
-        mode.addView(cmdButton("跟随", "U", Color.rgb(21, 94, 117)), weight());
-        mode.addView(cmdButton("避障", "A", Color.rgb(113, 63, 18)), weight());
+        mode.addView(cmdButton("循迹", "T", Color.rgb(79, 70, 229)), weight());
         root.addView(card(mode), lp());
+
+        LinearLayout auto = row();
+        auto.addView(cmdButton("跟随", "U", Color.rgb(21, 94, 117)), weight());
+        auto.addView(cmdButton("避障", "A", Color.rgb(113, 63, 18)), weight());
+        auto.addView(space(), weight());
+        root.addView(card(auto), lp());
 
         LinearLayout pad = col();
         LinearLayout r1 = row();

@@ -1,20 +1,22 @@
-# STM32 两轮自平衡小车 Stage 1
+# STM32 两轮自平衡小车 Lite · v2
 
-这是一个基于 STM32F103 的两轮自平衡小车项目，硬件平台为喵呜实验室「小霸王 Lite」增强版套件。当前仓库记录第一阶段成果：小车能够完成姿态采集、角度环与速度环控制、超声波跟随/避障、OLED 状态显示，以及 Android 手机蓝牙遥控。
+这是一个基于 STM32F103 的两轮自平衡小车项目，硬件平台来自喵呜实验室「小霸王 Lite」套件。本仓库记录第二版阶段成果：在教程基础上完成平衡控制、速度外环、超声波、红外、OLED、蓝牙遥控、Android 控制器和 FreeRTOS 慢任务管理。
 
-项目不是只按教程堆功能，而是在教程基础上补了调试可视化、安全保护、手机 APK 和项目文档整理，目标是形成一个可以讲清楚、可以演示、可以继续升级的嵌入式系统作品。
+v2 的目标不是单纯堆功能，而是把小车做成一个可以解释、可以演示、可以继续优化的软硬件系统作品。
 
-## 当前成果
+## 当前功能
 
 - MPU6050 姿态采集与互补滤波
-- 编码器脉冲读取，左右轮速度反馈
-- 角度环 PD 控制与速度外环 PI 控制
-- 机械零点、提起/着陆识别、电机保护
-- HC-SR04 超声波测距、跟随与避障模式
+- 编码器速度反馈，角度环 PD + 速度外环 PI
+- 电机死区补偿、速度目标斜坡、静止速度死区
+- 提起/空转识别、倾倒保护、机械零点试验逻辑
+- HC-SR04 超声波测距、跟随和避障
+- 四路红外循迹
 - SSD1306 OLED 状态显示
 - USART3 蓝牙单字符遥控协议
 - Android 蓝牙遥控 APK
-- 喵呜地面站串口曲线调试输出
+- FreeRTOS 管理 OLED、超声波/红外、地面站输出、按键等低频任务
+- 喵呜地面站 `$...;` 串口波形调试输出
 
 ## 仓库结构
 
@@ -22,62 +24,25 @@
 firmware/       STM32CubeMX + Keil 固件工程
 android-app/    Android 蓝牙遥控器源码
 release/apk/    可直接安装的 APK
-media/videos/   第一阶段演示视频
-media/screenshots/ App 截图
-docs/           项目理解、控制链路和测试说明
+media/          演示视频和截图
+docs/           项目理解、控制链路和调试记录
 ```
 
-## 硬件平台
-
-- STM32F103 核心板
-- MPU6050 姿态传感器
-- TB6612FNG 电机驱动
-- 两个带编码器直流减速电机
-- HC-SR04 超声波模块
-- SSD1306 0.96 寸 OLED
-- 经典蓝牙串口模块 HC-05 / HC-06 / MiaowLabs 蓝牙模块
-- 7.4V 锂电池供电
-
-## 固件工程
-
-Keil 工程路径：
+Keil 工程入口：
 
 ```text
 firmware/MDK-ARM/a.uvprojx
 ```
 
-最近一次本地编译结果：
+最新 v2 APK：
 
 ```text
-0 Error(s), 0 Warning(s)
+release/apk/hequn-car-controller-v2.apk
 ```
 
-主要源码模块：
+## 蓝牙协议
 
-```text
-Core/Src/control.c      角度环、速度环、电机输出、转向和安全保护
-Core/Src/bluetooth.c    蓝牙串口命令解析
-Core/Src/ultrasonic.c   超声波测距
-Core/Src/oled.c         OLED 状态页
-Core/Src/manage.c       运行模式管理
-Core/Src/stm32f1xx_it.c SysTick、TIM1、USART3 中断回调
-```
-
-## Android 遥控器
-
-APK 文件：
-
-```text
-release/apk/hequn-car-controller.apk
-```
-
-App 名称：
-
-```text
-贺群的小车控制器
-```
-
-蓝牙协议：
+手机 App 通过经典蓝牙串口发送单字符命令：
 
 ```text
 M = 手动遥控模式
@@ -86,62 +51,40 @@ B = 后退
 L = 左转
 R = 右转
 S = 停止
-U = 超声波跟随模式
-A = 超声波避障模式
+U = 超声波跟随
+A = 超声波避障
+T = 红外循迹
 ```
 
-当前 App 的方向键逻辑是“按住才运动，松手自动发送停止”，这样比点按式遥控更适合演示，也能避免小车一直保持速度目标。
+蓝牙不会直接写 PWM，而是调用 `Steer(direct, speed)` 设置运动目标。真正的电机输出由角度环、速度环和转向差速共同合成。
 
-## 演示素材
+## v2 相比 v1 的变化
 
-视频：
+- 引入 FreeRTOS，但保留 SysTick 中断中的高实时平衡控制。
+- 增加红外循迹模式和 OLED 调试信息。
+- 优化蓝牙手动控制幅度，让第一阶段演示更稳。
+- 增加静止速度死区、速度反馈滤波和积分释放，减少原地抖动。
+- 清理旧编码器模块，统一由 `control.c` 读取双编码器。
+- 补充大量中文注释，方便复盘控制链路。
+
+## 当前调试状态
+
+本地 Keil 编译结果：
 
 ```text
-media/videos/demo-balance-and-control-1.mp4
-media/videos/demo-balance-and-control-2.mp4
+0 Error(s), 0 Warning(s)
 ```
 
-截图：
+当前仍在调参阶段。已确认电机方向、编码器方向、角度反馈、蓝牙命令、OLED 显示、超声波和红外链路基本可用；后续重点是继续协调角度环、速度环、死区补偿和机械零点，让原地静止更稳。
 
-```text
-media/screenshots/app-connected.jpg
-media/screenshots/app-log.jpg
-```
+## 学习价值
 
-## 当前不足
+这个项目覆盖了一个嵌入式智能系统的完整链路：
 
-第一阶段先到“能站、能测、能遥控、能展示”。当前速度环和角度环还没有做最终精调，现象包括：
+- 传感器采集：MPU6050、编码器、超声波、红外
+- 控制算法：互补滤波、PD/PI、死区补偿、斜坡平滑
+- 实时系统：中断节拍 + FreeRTOS 慢任务
+- 人机交互：OLED、地面站、Android 蓝牙 App
+- 工程整理：Keil/CubeMX 工程、APK 发布、GitHub 文档
 
-- 静止时仍有轻微抖动
-- 遥控速度和刹车手感还需要继续调
-- 超声波跟随效果可用，但还不够平滑
-- App 目前是最小可用版，还没有速度档位和参数调节
-
-这些问题保留到第二阶段继续做，不影响第一阶段作为嵌入式系统集成作品归档。
-
-## Notion 项目理解
-
-这个项目对应的学习链路是：
-
-1. CubeMX 生成 STM32 工程
-2. GPIO、按键、定时器和串口基础
-3. 编码器与 PWM 电机驱动
-4. MPU6050 姿态采集与互补滤波
-5. PID 基础、角度环、速度环
-6. 机械零点、提起/着陆识别
-7. 超声波测距、避障、跟随
-8. OLED 状态显示
-9. 蓝牙遥控与 Android App
-
-更详细的整理见：
-
-```text
-docs/project-summary.md
-docs/control-and-debug-notes.md
-docs/bluetooth-app-notes.md
-docs/learning-reflection.md
-```
-
-## 简历表达
-
-基于 STM32F103 的两轮自平衡小车系统，完成 MPU6050 姿态解算、编码器速度反馈、角度 PD 与速度 PI 闭环控制、超声波跟随/避障、OLED 状态显示和 Android 蓝牙遥控 App，实现从底层驱动、闭环控制到移动端交互的完整嵌入式系统闭环。
+它是后续继续做嵌入式视觉、边缘 AI 和智能小车系统的基础项目。

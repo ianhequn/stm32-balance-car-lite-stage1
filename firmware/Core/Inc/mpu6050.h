@@ -6,6 +6,7 @@
 
 //#define MPU_ACCEL_OFFS_REG		0X06	//accel_offs寄存器,可读取版本号,寄存器手册未提到
 //#define MPU_PROD_ID_REG			0X0C	//prod id寄存器,在寄存器手册未提到
+/* MPU6050 寄存器地址表：后续读写函数都通过这些地址访问芯片内部寄存器。 */
 #define MPU_SELF_TESTX_REG		0X0D	//自检寄存器X
 #define MPU_SELF_TESTY_REG		0X0E	//自检寄存器Y
 #define MPU_SELF_TESTZ_REG		0X0F	//自检寄存器Z
@@ -82,6 +83,7 @@
 #define MPU_READ    0XD1
 #define MPU_WRITE   0XD0
 
+/* MPU6050 对外接口：初始化、寄存器读写、读取温度/陀螺仪/加速度。 */
 uint8_t MPU_Init(void); 						//初始化MPU6050
 uint8_t MPU_Write_Len(uint8_t reg,uint8_t len,uint8_t *buf);                           //IIC连续写
 uint8_t MPU_Read_Len(uint8_t reg,uint8_t len,uint8_t *buf);                         //IIC连续读 

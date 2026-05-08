@@ -32,7 +32,6 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "button.h"
-#include "encoder.h"
 #include "mpu6050.h"
 #include "control.h"
 /* USER CODE END Includes */
@@ -82,7 +81,23 @@ void Error_Handler(void);
 #define OLED_SCL_GPIO_Port GPIOB
 #define Button_Pin GPIO_PIN_8
 #define Button_GPIO_Port GPIOA
+#define Ra_Pin GPIO_PIN_15
+#define Ra_GPIO_Port GPIOA
+#define Lb_Pin GPIO_PIN_3
+#define Lb_GPIO_Port GPIOB
+#define Rb_Pin GPIO_PIN_4
+#define Rb_GPIO_Port GPIOB
+#define La_Pin GPIO_PIN_5
+#define La_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
+#define Ra_Pin GPIO_PIN_15
+#define Ra_GPIO_Port GPIOA
+#define Rb_Pin GPIO_PIN_4
+#define Rb_GPIO_Port GPIOB
+#define La_Pin GPIO_PIN_5
+#define La_GPIO_Port GPIOB
+#define Lb_Pin GPIO_PIN_3
+#define Lb_GPIO_Port GPIOB
 
 /* USER CODE END Private defines */
 

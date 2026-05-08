@@ -17,9 +17,13 @@
   */
 /* USER CODE END Header */
 
+//此文件代表中断服务函数文件
+//STM32 运行过程中，某些硬件事件突然发生时，CPU 会暂停当前事情，跳到这里执行对应函数
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_it.h"
+#include "FreeRTOS.h"
+#include "task.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "button.h"
@@ -60,6 +64,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+/* 中断文件需要访问 TIM1/USART 句柄，把硬件中断转交给 HAL 和用户回调。 */
 extern TIM_HandleTypeDef htim1;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart3;
@@ -146,19 +151,6 @@ void UsageFault_Handler(void)
 }
 
 /**
-  * @brief This function handles System service call via SWI instruction.
-  */
-void SVC_Handler(void)
-{
-  /* USER CODE BEGIN SVCall_IRQn 0 */
-
-  /* USER CODE END SVCall_IRQn 0 */
-  /* USER CODE BEGIN SVCall_IRQn 1 */
-
-  /* USER CODE END SVCall_IRQn 1 */
-}
-
-/**
   * @brief This function handles Debug monitor.
   */
 void DebugMon_Handler(void)
@@ -172,59 +164,76 @@ void DebugMon_Handler(void)
 }
 
 /**
-  * @brief This function handles Pendable request for system service.
-  */
-void PendSV_Handler(void)
-{
-  /* USER CODE BEGIN PendSV_IRQn 0 */
-
-  /* USER CODE END PendSV_IRQn 0 */
-  /* USER CODE BEGIN PendSV_IRQn 1 */
-
-  /* USER CODE END PendSV_IRQn 1 */
-}
-
-/**
   * @brief This function handles System tick timer.
   */
 void SysTick_Handler(void)
+//小车心跳
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-  g_nMainEventCount++;
-  g_nSpeedControlPeriod++;
-  if (g_nMainEventCount >= 5)
+  if (g_u8ControlTickEnabled)
   {
-    g_nMainEventCount = 0;
-    GetMotorPulse();
-  }
-  else if (g_nMainEventCount == 1)
-  {
-    GetMpuData();
-    AngleCalculate();
-  }
-  else if (g_nMainEventCount == 2)
-  {
-    AngleControl();
-  }
-  else if (g_nMainEventCount == 3)
-  {
-    g_nSpeedControlCount++;
-    if (g_nSpeedControlCount >= 5)
+    /*
+     * 硬实时控制仍放在 1ms SysTick：
+     * FreeRTOS 只管理 OLED/超声波/调试输出等低频任务，避免这些慢任务影响平衡。
+     */
+    ControlRampUpdate();
+		//让蓝牙/超声波/红外给出的速度目标、转向目标慢慢变化
+    g_nMainEventCount++;
+		//时间基准时间加1
+    g_nSpeedControlPeriod++;
+		//算速度环从旧的值到新的值的时间，后续计算得到速度环目标输出，使得速度在变换的时候更加平滑
+		//每 25ms 算出新的速度环输出然后把平滑计时器清零重新开始从 old 过渡到 new
+    if (g_nMainEventCount >= 5)
     {
-      SpeedControl();
-      g_nSpeedControlCount = 0;
-      g_nSpeedControlPeriod = 0;
+      g_nMainEventCount = 0;
+			//大于5时间就清零，5ms作为一个循环
+      GetMotorPulse();
+			//读编码器数据
     }
+    else if (g_nMainEventCount == 1)
+    {
+      GetMpuData();
+      AngleCalculate();
+			//读 MPU + 算角度
+    }
+    else if (g_nMainEventCount == 2)
+    {
+      AngleControl();
+			//角度环控制，因为角度是内环，更重要所以控制时间比速度环周期短
+    }
+    else if (g_nMainEventCount == 3)
+    {
+      g_nSpeedControlCount++;
+      if (g_nSpeedControlCount >= 5)
+				//速度环25ms为周期重新计算
+      {
+        SpeedControl();
+        g_nSpeedControlCount = 0;
+        g_nSpeedControlPeriod = 0;
+      }
+    }
+    else if (g_nMainEventCount == 4)
+    {
+      SpeedControlOutput();
+      MotorManage();
+      MotorOutput();
+			//速度输出 + 电机输出
+    }
+    ButtonScan();
+		//按键消抖，确认按下
   }
-  else if (g_nMainEventCount == 4)
-  {
-    SpeedControlOutput();
-    MotorManage();
-    MotorOutput();
-  }
-  ButtonScan();
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
+//让 HAL_GetTick() / HAL_Delay() 的时间继续走
+#if (INCLUDE_xTaskGetSchedulerState == 1 )
+  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
+  {
+#endif /* INCLUDE_xTaskGetSchedulerState */
+  xPortSysTickHandler();
+		//让 FreeRTOS 的任务调度时间继续走
+#if (INCLUDE_xTaskGetSchedulerState == 1 )
+  }
+#endif /* INCLUDE_xTaskGetSchedulerState */
   /* USER CODE BEGIN SysTick_IRQn 1 */
 HAL_SYSTICK_IRQHandler();
   /* USER CODE END SysTick_IRQn 1 */
@@ -283,6 +292,7 @@ void USART1_IRQHandler(void)
   * @brief This function handles USART3 global interrupt.
   */
 void USART3_IRQHandler(void)
+	//蓝牙中断，处理刚收到的蓝牙字节然后重新开启下一次接收
 {
   /* USER CODE BEGIN USART3_IRQn 0 */
 
@@ -294,6 +304,7 @@ void USART3_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+/* 串口接收完成回调：USART3 收到蓝牙字节后解释命令，并重新打开下一字节接收。 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART3)
@@ -303,6 +314,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   }
 }
 
+/* 串口错误回调：蓝牙串口出错时重新开启接收，避免遥控失联后不恢复。 */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART3)
@@ -311,6 +323,7 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
   }
 }
 
+/* TIM1 输入捕获回调：用 Echo 上升沿/下降沿测出超声波高电平宽度。 */
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)
@@ -334,6 +347,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
   }
 }
 
+/* TIM1 溢出回调：Echo 高电平超过 65535us 时累计溢出次数，防止测距时间截断。 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if (htim->Instance == TIM1)

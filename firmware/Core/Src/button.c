@@ -1,3 +1,4 @@
+/* 按键模块：在 SysTick 中做消抖，按下后给 FreeRTOS 按键任务一个事件标志。 */
 #include "button.h"
 #include "main.h"
 #include "stm32f1xx_it.h"
@@ -5,6 +6,7 @@
 int iButtonCount;//i浠ｈ〃int鍨嬪彉閲忥紝ButtonCount琛ㄧず鎸夐敭璁℃暟鍙橀噺
 int iButtonFlag;//i浠ｈ〃int鍨嬪彉閲忥紝ButtonFlag琛ㄧず閲嶆寜閿爣蹇楋紝1浠ｈ〃閲嶆柊鎸夐敭锛?涓烘病鏈夐噸鏂版寜閿?
 int g_iButtonState;//g鏄痝loble浠ｈ〃鍏ㄥ眬鍙橀噺锛屼細鍦ㄥ叾浠栧湴鏂瑰紩鐢紱i浠ｈ〃int鍨嬪彉閲忥紝ButtonState琛ㄧず鎸夐敭鏍囧織锛?浠ｈ〃鎸変笅锛?浠ｈ〃鏉惧紑
+/* 按键扫描函数：低电平持续约 30ms 才认为是一次有效按下。 */
 void ButtonScan(void){
   if(   HAL_GPIO_ReadPin(Button_GPIO_Port,Button_Pin) == GPIO_PIN_RESET )//濡傛灉寮曡剼妫�娴嬪埌浣庣數骞?
   {

@@ -3,11 +3,14 @@
 #include "manage.h"
 #include "ultrasonic.h"
 #include "bluetooth.h"
+#include "infrared.h"
 #include "u8x8.h"
 #include <stdio.h>
 
+/* U8x8 显示对象，保存当前 OLED 驱动、字体和通信回调状态。 */
 static u8x8_t g_oled;
 
+/* 把运行模式编号转换成屏幕上显示的英文短字符串。 */
 static const char *OLED_GetModeString(void)
 {
     if (g_CarRunningMode == ULTRA_FOLLOW_MODE) return "FOLLOW";
@@ -17,6 +20,7 @@ static const char *OLED_GetModeString(void)
     return "UNKN  ";
 }
 
+/* U8x8 软件 SPI 需要的短延时，精度不追求很高，只服务 OLED 时序。 */
 static void OLED_Delay10Us(uint16_t n)
 {
     volatile uint16_t i;
@@ -30,6 +34,7 @@ static void OLED_Delay10Us(uint16_t n)
     }
 }
 
+/* U8x8 的 HAL 适配回调：库通过 msg 请求我们拉高/拉低 GPIO 或延时。 */
 uint8_t OLED_U8x8GpioAndDelay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *arg_ptr)
 {
     (void)u8x8;
@@ -86,6 +91,7 @@ uint8_t OLED_U8x8GpioAndDelay(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void *
     return 1;
 }
 
+/* 初始化 SSD1306 128x64 OLED，选择 4 线软件 SPI 和文本字体。 */
 void OLED_Init(void)
 {
     u8x8_Setup(&g_oled,
@@ -100,6 +106,7 @@ void OLED_Init(void)
     u8x8_DrawString(&g_oled, 0, 0, "Hello OLED");
 }
 
+/* OLED 主页刷新：显示模式、角度、距离、速度、零点、蓝牙和红外状态。 */
 void OLED_ShowHomePage(void)
 {
     char line[18];
@@ -119,7 +126,13 @@ void OLED_ShowHomePage(void)
     snprintf(line, sizeof(line), "SPD :%6.1f", g_fCarSpeedSet);
     u8x8_DrawString(&g_oled, 0, 3, line);
 
+    snprintf(line, sizeof(line), "ZRO :%6.1f", g_fCarAngleOffset);
+    u8x8_DrawString(&g_oled, 0, 4, line);
+
     bt = (g_u8BluetoothLastByte == 0) ? '-' : (char)g_u8BluetoothLastByte;
     snprintf(line, sizeof(line), "BT  :%c %5lu", bt, (unsigned long)g_u32BluetoothRxCount);
     u8x8_DrawString(&g_oled, 0, 5, line);
+
+    snprintf(line, sizeof(line), "IR  :%02X %4d", g_u8InfraredTraceState, g_iInfraredTraceError);
+    u8x8_DrawString(&g_oled, 0, 6, line);
 }

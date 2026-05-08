@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "adc.h"
 #include "i2c.h"
 #include "tim.h"
@@ -32,6 +33,7 @@
 #include "ultrasonic.h"
 #include "oled.h"
 #include "bluetooth.h"
+#include "infrared.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,13 +53,11 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-static uint32_t g_last_debug_tick = 0;
-static uint32_t g_last_ultra_tick = 0;
-static uint32_t g_last_oled_tick = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -104,22 +104,34 @@ int main(void)
   MX_TIM1_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+  /* 业务模块初始化：先启动传感器/电机/超声波/OLED/蓝牙，再允许控制中断工作。 */
   if (!MPU_Init())
   {
     printf("MPU-6050 Init Successfully\r\n");
   }
+  /* TIM4/TIM2 工作在编码器模式，分别读取右轮和左轮脉冲。 */
   HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  /* TIM3_CH1/CH2 输出左右电机 PWM。 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   HAL_ADC_Start(&hadc1);
+  /* TIM1_CH4 输入捕获用于读取超声波 Echo 高电平宽度。 */
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4);
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
   UltraSelfCheck();
   OLED_Init();
   Bluetooth_Init();
+  /* 所有关键外设准备好之后，才打开 SysTick 里的平衡控制节拍。 */
+  g_u8ControlTickEnabled = 1;
   /* USER CODE END 2 */
 
+  /* Call init function for freertos objects (in freertos.c) */
+  MX_FREERTOS_Init();
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -127,46 +139,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (g_iButtonState == 1)
-    {
-      while (HAL_GPIO_ReadPin(Button_GPIO_Port, Button_Pin) == GPIO_PIN_RESET)
-      {
-      }
-      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-      g_iButtonState = 0;
-    }
-
-    if (HAL_GetTick() - g_last_debug_tick >= 50)
-    {
-      g_last_debug_tick = HAL_GetTick();
-      printf("$%.1f %.1f %.1f %.1f %.1f %.1f;",
-             g_fCarAngle,
-             Distance,
-             g_fCarSpeedSet,
-             g_fSpeedControlOut,
-             (float)g_u8BluetoothLastByte,
-             (float)g_u32BluetoothRxCount);
-    }
-
-    if (HAL_GetTick() - g_last_ultra_tick >= 20)
-    {
-      g_last_ultra_tick = HAL_GetTick();
-      Read_Distane();
-      if (g_CarRunningMode == ULTRA_FOLLOW_MODE)
-      {
-        UltraControl(0);
-      }
-      else if (g_CarRunningMode == ULTRA_AVOID_MODE)
-      {
-        UltraControl(1);
-      }
-    }
-
-    if (HAL_GetTick() - g_last_oled_tick >= 200)
-    {
-      g_last_oled_tick = HAL_GetTick();
-      OLED_ShowHomePage();
-    }
+    Error_Handler();
   }
   /* USER CODE END 3 */
 }

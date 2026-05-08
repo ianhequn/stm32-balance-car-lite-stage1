@@ -15,6 +15,7 @@ firmware/MDK-ARM/a/
 *.uvgui.*
 *.scvd
 *.sct
+*.log
 
 # STM32Cube / editor local state
 .mxproject.lock

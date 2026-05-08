@@ -3,11 +3,13 @@
 
 #include "main.h"
 
+/* 超声波测距状态和结果，TIM1 捕获中断负责更新。 */
 extern volatile uint8_t TIM1CH4_CAPTURE_STA;
 extern volatile uint16_t TIM1CH4_CAPTURE_VAL;
 extern float Distance;
 extern uint8_t UltraError;
 
+/* 触发/读取一次超声波测距流程。 */
 void Read_Distane(void);
 void UltraSelfCheck(void);
 uint8_t IsUltraOK(void);

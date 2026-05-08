@@ -1,12 +1,15 @@
 #include "filter.h"
 
+/* »¥²¹ÂË²¨ÄÚ²¿±£´æµÄÉÏÒ»´Î½Ç¶È£¬ÏÂÒ»´ÎÂË²¨»á¼ÌĞøÑØÓÃ¡£ */
 float angle;
+/* ÂË²¨È¨ÖØ£ºÔ½½Ó½ü 1 Ô½ĞÅÈÎÍÓÂİÒÇ¶ÌÊ±»ı·Ö¡£ */
 float a;
 
+/* »¥²¹ÂË²¨£ºacc ¸ø³¤ÆÚ¾ø¶Ô½Ç¶È£¬gyro ¸ø¶ÌÊ±½ÇËÙ¶È»ı·Ö¡£ */
 float ComplementaryFilter(float acc, float gyro, float dt)
 {
     a = 0.98f;
-    /* accä¿®æ­£é•¿æœŸè§’åº¦æ¼‚ç§»ï¼Œgyroè´Ÿè´£çŸ­æ—¶é—´å¿«é€Ÿå“åº”ã€‚ */
+    /* accĞŞÕı³¤ÆÚ½Ç¶ÈÆ¯ÒÆ£¬gyro¸ºÔğ¶ÌÊ±¼ä¿ìËÙÏìÓ¦¡£ */
     angle = a * (angle + gyro * dt) + (1.0f - a) * acc;
     return angle;
 }
