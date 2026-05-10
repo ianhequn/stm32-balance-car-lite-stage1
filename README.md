@@ -40,6 +40,20 @@ firmware/MDK-ARM/a.uvprojx
 release/apk/hequn-car-controller-v2.apk
 ```
 
+## 最新仿真更新
+
+本版新增 A43「数学建模」Simulink 可行性验证：
+
+- `docs/simulink/a43_modeling/`：Simulink 模型、MATLAB 脚本和结果图
+- `docs/simulink/a43-modeling-analysis.md`：建模链条、极点分析、PD 可行性说明
+
+MATLAB 运行方式：
+
+```matlab
+cd('docs/simulink/a43_modeling')
+run_a43_verification
+```
+
 ## 蓝牙协议
 
 手机 App 通过经典蓝牙串口发送单字符命令：

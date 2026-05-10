@@ -8,4 +8,4 @@ const char MCUVer[] = "STM32F103";
 uint32_t g_RunTime;
 float g_BatVolt;
 /* 当前运行模式：蓝牙、超声波、红外任务都会根据它决定谁来调用 Steer()。 */
-uint8_t g_CarRunningMode = ULTRA_FOLLOW_MODE;
+uint8_t g_CarRunningMode = CONTROL_MODE  ;

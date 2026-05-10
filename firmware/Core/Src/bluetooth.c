@@ -9,6 +9,10 @@ uint8_t g_u8BluetoothRxByte;
 volatile uint8_t g_u8BluetoothLastByte = 0;
 /* 蓝牙接收计数，按键没有反应时可以用它判断 STM32 是否真的收到数据。 */
 volatile uint32_t g_u32BluetoothRxCount = 0;
+/* 最近一次蓝牙命令时间，用来做手动模式超时刹停，防止松手 S 丢包后小车继续跑。 */
+volatile uint32_t g_u32BluetoothLastTick = 0;
+
+#define BLUETOOTH_MANUAL_TIMEOUT_MS  350u
 
 /* 启动 USART3 单字节中断接收，后续每收到 1 字节都会进回调。 */
 void Bluetooth_Init(void)
@@ -20,6 +24,7 @@ void Bluetooth_OnByteReceived(uint8_t data)
 {
     g_u8BluetoothLastByte = data;
     g_u32BluetoothRxCount++;
+    g_u32BluetoothLastTick = HAL_GetTick();
 
     /* 单字符协议：手机 App 每发一个字符，小车切模式或更新 Steer 目标。 */
     switch (data)
@@ -92,5 +97,25 @@ void Bluetooth_OnByteReceived(uint8_t data)
 
     default:
         break;
+    }
+}
+
+void Bluetooth_ManualWatchdog(void)
+{
+    if (g_CarRunningMode != CONTROL_MODE)
+    {
+        return;
+    }
+
+    if ((HAL_GetTick() - g_u32BluetoothLastTick) > BLUETOOTH_MANUAL_TIMEOUT_MS)
+    {
+        /*
+         * 手动模式空闲保护：
+         * 如果手机松手时 S 指令因为蓝牙瞬断丢了，这里会自动清目标，
+         * 避免 CTRL 模式下保留上一次 F/B/L/R 导致小车一直跑。
+         */
+        MotorClearAbnormalSpin();
+        Steer(0.0f, 0.0f);
+        g_u32BluetoothLastTick = HAL_GetTick();
     }
 }

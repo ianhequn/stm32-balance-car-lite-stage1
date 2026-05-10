@@ -187,6 +187,11 @@ void StartMotionTask(void const * argument)
     {
       InfraredTraceControl();
     }
+    else if (g_CarRunningMode == CONTROL_MODE)
+    {
+      /* 手动模式不主动生成运动目标，只做蓝牙超时刹停保护。 */
+      Bluetooth_ManualWatchdog();
+    }
 
     osDelay(20);
   }

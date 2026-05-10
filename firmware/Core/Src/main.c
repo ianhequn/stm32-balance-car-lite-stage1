@@ -105,9 +105,14 @@ int main(void)
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   /* 业务模块初始化：先启动传感器/电机/超声波/OLED/蓝牙，再允许控制中断工作。 */
+  printf("\r\nBOOT: USART1 printf ok\r\n");
   if (!MPU_Init())
   {
     printf("MPU-6050 Init Successfully\r\n");
+  }
+  else
+  {
+    printf("MPU-6050 Init Failed\r\n");
   }
   /* TIM4/TIM2 工作在编码器模式，分别读取右轮和左轮脉冲。 */
   HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL);
@@ -119,11 +124,16 @@ int main(void)
   /* TIM1_CH4 输入捕获用于读取超声波 Echo 高电平宽度。 */
   HAL_TIM_IC_Start_IT(&htim1, TIM_CHANNEL_4);
   __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
+  printf("BOOT: timers started\r\n");
   UltraSelfCheck();
+  printf("BOOT: ultrasonic checked\r\n");
   OLED_Init();
+  printf("BOOT: oled initialized\r\n");
   Bluetooth_Init();
+  printf("BOOT: bluetooth initialized\r\n");
   /* 所有关键外设准备好之后，才打开 SysTick 里的平衡控制节拍。 */
   g_u8ControlTickEnabled = 1;
+  printf("BOOT: control tick enabled\r\n");
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */

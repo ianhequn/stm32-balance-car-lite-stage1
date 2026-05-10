@@ -13,20 +13,20 @@
  */
 
 /* 电机低 PWM 常常推不动齿轮箱，所以需要死区补偿。 */
-#define MOTOR_OUT_DEAD_VAL       31.0f
+#define MOTOR_OUT_DEAD_VAL       30.0f
 /* 小于这个范围的输出当作噪声，不给电机，避免原地轻微抖动。 */
-#define MOTOR_OUT_NOISE_BAND      8.0f
+#define MOTOR_OUT_NOISE_BAND      5.0f
 #define MOTOR_OUT_MAX           999
 #define MOTOR_OUT_MIN         (-999)
 
-/* 机械零点试验版：先固定为 0，验证原地抖动是否来自零点偏移。 */
-#define CAR_ZERO_ANGLE          0.0f
+/* 机械零点：真实能稳定的角度不一定是传感器读数 0 度。 */
+#define CAR_ZERO_ANGLE          (g_fCarAngleOffset)
 #define CAR_ANGLE_SET           CAR_ZERO_ANGLE
 #define CAR_ANGLE_SPEED_SET     0
 
-/* 速度环积分限幅。太大时会出现“先推不动，动起来后突然冲”。 */
-#define CAR_POSITION_MAX        550
-#define CAR_POSITION_MIN      (-550)
+/* 角度环站立测试版：速度环先大幅收弱，只让它轻微防跑。 */
+#define CAR_POSITION_MAX         60
+#define CAR_POSITION_MIN       (-60)
 #define SPEED_CONTROL_PERIOD    25
 
 /* 手动模式最大速度/转向输出，先保守一点，方便测试和录视频。 */
@@ -37,7 +37,12 @@
 /* 每 1ms 转向差速最多变化多少。用于让 L/R 不再硬跳变。 */
 #define DIRECTION_RAMP_STEP       5.0f
 /* 速度环积分每 25ms 最大增加量，防止低速卡住时积分越积越多。 */
-#define SPEED_INTEGRAL_STEP_MAX   0.45f
+#define SPEED_INTEGRAL_STEP_MAX   0.05f
+/* 速度环总输出限幅：它本质上是在给角度环一个“前后倾”的要求，不能太大。 */
+#define SPEED_CONTROL_OUT_MAX     35.0f
+/* 角度偏大时先让角度环救车，速度环退让，减少两个环互相打架。 */
+#define SPEED_ANGLE_GATE_START     3.0f
+#define SPEED_ANGLE_GATE_END       8.0f
 /* 静止目标死区：目标速度非常接近 0 时，认为当前就是停止状态。 */
 #define SPEED_STOP_SET_DEAD_BAND       0.12f
 /* 静止反馈死区：停止状态下编码器只有很小脉冲时，按速度为 0 处理。 */
@@ -121,11 +126,11 @@ int g_iRightTurnRoundCnt;
 static int AbnormalSpinFlag = 0;
 
 /* 角度环 PD 参数：P 抗倾倒，D 抑制角速度。 */
-float g_fAngle_P = 38.0f;
+float g_fAngle_P = 40.0f;
 float g_fAngle_D = 1.6f;
-/* 速度环 PI 参数：P 响应速度误差，I 抑制长期漂移。 */
-float g_fSpeed_P = 0.18f;
-float g_fSpeed_I = 0.003f;
+/* 速度环 PI 参数：当前站立测试先极弱化，避免影响角度环判断。 */
+float g_fSpeed_P = 0.03f;
+float g_fSpeed_I = 0.0f;
 /* 通用限幅函数：只限制数值范围，不做单位映射。 */
 static float LimitFloat(float value, float min, float max)
 {
@@ -162,6 +167,30 @@ static float ApplyMotorDeadZone(float value)
 
     if (value > 0.0f) return value + MOTOR_OUT_DEAD_VAL;
     return value - MOTOR_OUT_DEAD_VAL;
+}
+
+/* 计算速度环介入比例：车身越歪，速度环越退让，先保证角度环把车救回来。 */
+static float GetSpeedLoopGate(void)
+{
+    float absAngle = g_fCarAngle;
+
+    if (absAngle < 0.0f)
+    {
+        absAngle = -absAngle;
+    }
+
+    if (absAngle <= SPEED_ANGLE_GATE_START)
+    {
+        return 1.0f;
+    }
+
+    if (absAngle >= SPEED_ANGLE_GATE_END)
+    {
+        return 0.0f;
+    }
+
+    return (SPEED_ANGLE_GATE_END - absAngle)
+         / (SPEED_ANGLE_GATE_END - SPEED_ANGLE_GATE_START);
 }
 
 
@@ -317,10 +346,13 @@ void ControlRampUpdate(void)
 
 void ControlCalibrateZeroAngle(void)
 {
-    /* 当前试验固定机械零点为 0：按键只清空偏移值和速度环残留。 */
+    /* 按键校准机械零点：车身扶正且角度不大时，把当前角度吸收到零点偏移里。 */
     if (g_fCarAngle > -ZERO_CALIBRATE_LIMIT && g_fCarAngle < ZERO_CALIBRATE_LIMIT)
     {
-        g_fCarAngleOffset = 0.0f;
+        g_fCarAngleOffset += g_fCarAngle;
+        g_fCarAngleOffset = LimitFloat(g_fCarAngleOffset,
+                                       -ZERO_CALIBRATE_LIMIT,
+                                       ZERO_CALIBRATE_LIMIT);
         MotorClearAbnormalSpin();
     }
 }
@@ -359,6 +391,8 @@ void SpeedControl(void)
 {
     float fP, fI;
     float fDelta;
+    float fSpeedOut;
+    float fGate;
 
     /*
      * 速度环 25ms 执行一次：
@@ -373,8 +407,13 @@ void SpeedControl(void)
     g_fCarSpeed = 0.8f * g_fCarSpeedPrev + 0.2f * g_fCarSpeed;
     g_fCarSpeedPrev = g_fCarSpeed;
 
-    fDelta = g_fCarSpeedSet;
-    fDelta -= g_fCarSpeed;
+    /*
+     * 速度误差方向要和 MotorOutput() 里的 “AngleOut - SpeedOut” 配套：
+     * 当前车往前跑时，SpeedOut 应该变成正值，最终从电机输出中减掉，
+     * 这样轮子才会产生反向刹车效果，而不是继续帮它加速。
+     */
+    fDelta = g_fCarSpeed;
+    fDelta -= g_fCarSpeedSet;
 
     if (g_fCarSpeedSet > -SPEED_STOP_SET_DEAD_BAND
         && g_fCarSpeedSet < SPEED_STOP_SET_DEAD_BAND
@@ -413,8 +452,23 @@ void SpeedControl(void)
 
     g_fCarPosition = LimitFloat(g_fCarPosition, CAR_POSITION_MIN, CAR_POSITION_MAX);
 
+    fSpeedOut = fP + g_fCarPosition;
+    fSpeedOut = LimitFloat(fSpeedOut, -SPEED_CONTROL_OUT_MAX, SPEED_CONTROL_OUT_MAX);
+
+    /*
+     * 角度环优先：
+     * 车身偏得比较大时，速度环不要继续要求小车追速度/追位置，
+     * 否则会出现速度环想纠偏、角度环想救车，两个环互相拉扯。
+     */
+    fGate = GetSpeedLoopGate();
+    if (fGate < 1.0f)
+    {
+        fSpeedOut *= fGate;
+        g_fCarPosition *= fGate;
+    }
+
     g_fSpeedControlOutOld = g_fSpeedControlOutNew;
-    g_fSpeedControlOutNew = fP + g_fCarPosition;
+    g_fSpeedControlOutNew = fSpeedOut;
 }
 
 void SpeedControlOutput(void)
